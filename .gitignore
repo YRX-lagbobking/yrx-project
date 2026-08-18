@@ -1,0 +1,21 @@
+# Python 虚拟环境（这是最大的罪魁祸首！）
+venv/
+env/
+ENV/
+.venv/
+.env
+
+# 编辑器缓存（虽然不大，但很烦人）
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# 如果有大型数据文件，也排除掉
+*.mp4
+*.avi
+*.pkl
+*.h5
+*.pb
+*.csv
+*.xlsx
