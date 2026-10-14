@@ -1,0 +1,357 @@
+# =============================================================================
+# 智能健康管家多智能体系统 —— 一键部署编排（NFR-05）
+# -----------------------------------------------------------------------------
+# 启动：docker compose up -d
+# 查看：docker compose ps
+# 日志：docker compose logs -f app
+# 停止：docker compose down          （加 -v 会连数据卷一起删，谨慎使用）
+#
+# 服务清单与端口：
+#   mysql      3306   业务结构化数据（自动执行 sql/init.sql）
+#   postgres   5432   摘要记忆 + LangGraph Checkpointer
+#   redis      6379   窗口记忆 / 画像 / 会话锁 / Celery broker
+#   influxdb   8181   InfluxDB 3 Core 时序库（vital_signs）
+#   etcd       2379   Milvus 依赖：元数据
+#   minio      9000/9001  Milvus 依赖：对象存储（端口与 MCP 冲突已避开）
+#   milvus     19530  Milvus standalone：健康知识向量 + 长期记忆
+#   mcp-server 9000   MCP 工具服务（KeyVerifier 鉴权）
+#   app        8000   后端 + 前端静态页面
+#
+# ⚠️ 重要：InfluxDB 3 Core 容器内以 UID 1500 运行，首次挂载空数据卷会因权限失败。
+#         修复命令（README 也有一份）：
+#   docker run --rm --user root -v influxdb3_data:/var/lib/influxdb3/data \
+#     influxdb:3-core chown -R 1500:1500 /var/lib/influxdb3/data
+# =============================================================================
+
+name: health-butler
+
+# ---------------------------------------------------------------------------
+# 公共片段：应用镜像（app 与 mcp-server 共用，避免重复构建）
+# ---------------------------------------------------------------------------
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: health-butler:1.0
+  restart: unless-stopped
+  env_file:
+    - .env
+  environment:
+    # 容器内互访必须用服务名，覆盖 .env 里的 localhost
+    DB_HOST: mysql
+    PG_HOST: postgres
+    POSTGRESQL_URL: postgresql://postgres:1234@postgres:5432/postgres?sslmode=disable
+    REDIS_HOST: redis
+    REDIS_URL: redis://redis:6379/0
+    INFLUX_URL: http://influxdb:8181
+    MILVUS_HOST: milvus
+    MCP_SERVER_URL: http://mcp-server:9000
+  networks:
+    - health-net
+
+services:
+  # =========================================================================
+  # 1. MySQL 8：用户 / 档案 / 用药 / 告警 / 知识文档
+  # =========================================================================
+  mysql:
+    image: mysql:8.0
+    container_name: health-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-1234}
+      MYSQL_DATABASE: ${DB_NAME:-health_butler}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 首次初始化自动执行建库建表 + 初始化数据
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 2. PostgreSQL 16：摘要记忆（conversation_summary）+ Checkpointer 表
+  # =========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: health-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-1234}
+      POSTGRES_DB: ${PG_DB:-postgres}
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DB:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 3. Redis 7：窗口记忆 / 用户画像 / 会话 / 分布式锁 / Celery broker
+  # =========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: health-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 4. InfluxDB 3 Core：vital_signs 时序数据（保留期 30d）
+  #    建库（首次启动后执行一次）：
+  #      docker exec -it health-influxdb influxdb3 create database \
+  #        --retention-period 30d --token <INFLUX_TOKEN> agent_db
+  # =========================================================================
+  influxdb:
+    image: ${INFLUXDB_IMAGE:-influxdb:3-core}
+    container_name: health-influxdb
+    restart: unless-stopped
+    command:
+      - influxdb3
+      - serve
+      - --node-id=health-node-1
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --plugin-dir=/var/lib/influxdb3/plugins
+    environment:
+      INFLUXDB3_AUTH_TOKEN: ${INFLUX_TOKEN:-health-butler-influx-token}
+      TZ: Asia/Shanghai
+    ports:
+      - "8181:8181"
+    volumes:
+      - influxdb3_data:/var/lib/influxdb3/data
+      - influxdb3_plugins:/var/lib/influxdb3/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "influxdb3 show system --token $${INFLUXDB3_AUTH_TOKEN} || exit 1"]
+      interval: 15s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 5. Milvus 依赖 1：etcd（元数据存储）
+  # =========================================================================
+  etcd:
+    image: ${ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.5}
+    container_name: health-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls=http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 6. Milvus 依赖 2：MinIO（对象存储）
+  #    注意：控制台端口用 9001（内部 API 9000 只在容器网络内暴露，避免与 MCP Server 冲突）
+  # =========================================================================
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2023-03-20T20-16-18Z}
+    container_name: health-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 7. Milvus standalone 单机版（健康知识向量 health_knowledge + 长期记忆 long_memory）
+  #    简化说明：单机版把 etcd + MinIO + Milvus 三段合成一个可跑的组合；
+  #              生产应使用 Milvus 集群或 Zilliz Cloud。
+  #    内存要求：Milvus 至少 4G，本机跑不动时用 RAG_MODE=keyword 关闭向量检索（风险 R-04）。
+  # =========================================================================
+  milvus:
+    image: ${MILVUS_IMAGE:-milvusdb/milvus:v2.4.13}
+    container_name: health-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      TZ: Asia/Shanghai
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 90s
+    networks:
+      - health-net
+
+  # =========================================================================
+  # 8. MCP Server：健康档案 / 用药 / 时序 / 知识 / 报告 / 通知 六类工具（端口 9000）
+  #    同一个镜像，用 command 覆盖启动入口。
+  # =========================================================================
+  mcp-server:
+    <<: *app-base
+    container_name: health-mcp-server
+    command: ["python", "-m", "mcp_server.mcp_health_server"]
+    environment:
+      DB_HOST: mysql
+      PG_HOST: postgres
+      REDIS_HOST: redis
+      INFLUX_URL: http://influxdb:8181
+      MILVUS_HOST: milvus
+      MCP_SERVER_URL: http://0.0.0.0:9000
+    ports:
+      - "9000:9000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/healthz || curl -fsS http://localhost:9000/health || exit 1"]
+      interval: 30s
+      timeout: 8s
+      retries: 5
+      start_period: 40s
+
+  # =========================================================================
+  # 9. 后端应用：FastAPI + LangGraph + 前端静态页面（端口 8000）
+  # =========================================================================
+  app:
+    <<: *app-base
+    container_name: health-app
+    command: ["python", "-m", "app.main"]
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载运行期产物目录，便于宿主机直接取报告与语音文件
+      - ./app/html/tts:/app/app/html/tts
+      - ./app/html/reports:/app/app/html/reports
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      influxdb:
+        # InfluxDB 3 Core 的健康检查依赖 Token，可能与手工创建的 Token 不匹配；
+        # 用 service_started 避免误判导致 app 永远不启动（应用侧本来就有降级）
+        condition: service_started
+      mcp-server:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 8s
+      retries: 5
+      start_period: 60s
+
+  # =========================================================================
+  # 10. Celery Worker（异步告警通知，可选）
+  #     Windows 本机开发用 -P solo；容器内用默认 prefork 即可。
+  #     需要时取消下面的注释。
+  # =========================================================================
+  # celery-worker:
+  #   <<: *app-base
+  #   container_name: health-celery-worker
+  #   command: ["celery", "-A", "app.core.celery_app", "worker", "-l", "info"]
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #
+  # celery-beat:
+  #   <<: *app-base
+  #   container_name: health-celery-beat
+  #   command: ["celery", "-A", "app.core.celery_app", "beat", "-l", "info"]
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+
+# ---------------------------------------------------------------------------
+# 数据卷：删掉 compose 时数据保留，需要清空请 docker compose down -v
+# ---------------------------------------------------------------------------
+volumes:
+  mysql_data:
+    name: health_mysql_data
+  postgres_data:
+    name: health_postgres_data
+  redis_data:
+    name: health_redis_data
+  influxdb3_data:
+    name: influxdb3_data
+  influxdb3_plugins:
+    name: influxdb3_plugins
+  etcd_data:
+    name: health_etcd_data
+  minio_data:
+    name: health_minio_data
+  milvus_data:
+    name: health_milvus_data
+
+# ---------------------------------------------------------------------------
+# 自定义网络：所有服务在同一网段，可用服务名互访
+# ---------------------------------------------------------------------------
+networks:
+  health-net:
+    name: health-net
+    driver: bridge

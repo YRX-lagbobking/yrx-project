@@ -1,0 +1,165 @@
+# =============================================================================
+# 智能健康管家 —— 混合模式：只把"吃资源 / 难安装"的中间件放 Docker
+# =============================================================================
+# 适用场景（本文件就是为这个场景写的）：
+#     MySQL / PostgreSQL / Redis  →  装在本机（Windows 服务或本机进程）
+#     Milvus（+ etcd + MinIO）    →  Docker
+#     InfluxDB 3 Core            →  Docker
+#     后端 / MCP Server / Celery  →  直接在 Windows 上跑（python -m app.main）
+#
+# 启动：docker compose -f docker-compose.middleware.yml up -d
+# 状态：docker compose -f docker-compose.middleware.yml ps
+# 日志：docker compose -f docker-compose.middleware.yml logs -f milvus
+# 停止：docker compose -f docker-compose.middleware.yml down
+#      （加 -v 会连数据卷一起删，Milvus 向量与 InfluxDB 数据都会丢，谨慎）
+#
+# 与主文件 docker-compose.yml 的关系：
+#   * 项目名相同（health-butler）、网络相同（health-net）、数据卷同名，
+#     因此两个文件共用同一批容器与数据，可以随时在两种模式间切换；
+#   * 本文件**故意不含** mysql / postgres / redis / mcp-server / app，
+#     避免抢占 3306 / 5432 / 6379 / 8000 / 9000 与本机服务冲突。
+#
+# ⚠️ 用本文件时，不要执行 `docker compose up -d`（那是全容器模式，会抢端口）。
+# =============================================================================
+
+name: health-butler
+
+services:
+  # =========================================================================
+  # Milvus 不是单个容器：standalone 必须有 etcd（元数据）+ MinIO（对象存储）
+  # =========================================================================
+  etcd:
+    image: ${ETCD_IMAGE:-quay.io/coreos/etcd:v3.5.5}
+    container_name: health-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls=http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - health-net
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2023-03-20T20-16-18Z}
+    container_name: health-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    # 控制台 9001；内部 API 9000 只在容器网络内暴露，不和 MCP Server 的 9000 冲突
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio_data:/minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - health-net
+
+  milvus:
+    image: ${MILVUS_IMAGE:-milvusdb/milvus:v2.4.13}
+    container_name: health-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      TZ: Asia/Shanghai
+    ports:
+      # 19530 给 pymilvus 用；9091 是健康检查/指标端口
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+      start_period: 90s   # Milvus 首次启动较慢，start_period 给足 90 秒
+    networks:
+      - health-net
+
+  # =========================================================================
+  # InfluxDB 3 Core（时序生命体征 vital_signs）
+  #
+  # ⚠️ 端口冲突处理（两选一）：
+  #   A) 你之前手动创建过 influxdb3-core 容器（占 8181）：
+  #      先 `docker rm -f influxdb3-core` 再启动本文件；
+  #      数据卷名同为 influxdb3_data，历史数据与 Token 会继续沿用。
+  #   B) 想保留原来那个容器：把下面整段 influxdb 服务注释掉，
+  #      其余服务照常启动（.env 里 INFLUX_URL 指向 localhost:8181 即可）。
+  #
+  # 首次启动后建库（保留期 30 天，InfluxDB 3 Core 不支持按点删除）：
+  #   docker exec -it health-influxdb influxdb3 create database \
+  #     --retention-period 30d --token <INFLUX_TOKEN> agent_db
+  # =========================================================================
+  influxdb:
+    image: ${INFLUXDB_IMAGE:-influxdb:3-core}
+    container_name: health-influxdb
+    restart: unless-stopped
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --plugin-dir=/var/lib/influxdb3/plugins
+    environment:
+      INFLUXDB3_AUTH_TOKEN: ${INFLUX_TOKEN:-health-butler-influx-token}
+      TZ: Asia/Shanghai
+    ports:
+      - "8181:8181"
+    volumes:
+      # 卷名与手动创建时一致，历史数据可直接复用
+      - influxdb3_data:/var/lib/influxdb3/data
+      - influxdb3_plugins:/var/lib/influxdb3/plugins
+    networks:
+      - health-net
+    # 说明：这里不设 healthcheck —— influxdb:3-core 镜像内没有 curl，
+    # 用 CLI 做检查又依赖有效 Token，容易误报 unhealthy。
+    # 验证方式（任选）：
+    #   docker exec -it health-influxdb influxdb3 show system --token <INFLUX_TOKEN>
+    #   python -c "from app.ai.tool.influx_tool import is_available; print(is_available())"
+
+# ---------------------------------------------------------------------------
+# 数据卷：显式命名，与主 compose 完全一致，两个文件共享同一份数据
+# ---------------------------------------------------------------------------
+volumes:
+  etcd_data:
+    name: health_etcd_data
+  minio_data:
+    name: health_minio_data
+  milvus_data:
+    name: health_milvus_data
+  influxdb3_data:
+    name: influxdb3_data
+  influxdb3_plugins:
+    name: influxdb3_plugins
+
+networks:
+  health-net:
+    name: health-net
+    driver: bridge

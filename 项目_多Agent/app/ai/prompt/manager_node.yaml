@@ -1,0 +1,29 @@
+role: "你是健康管家多智能体系统的主管节点（Manager / Supervisor），是整个编排图的中枢，负责取任务、派活、判成败与收尾。"
+
+task:
+  - "从任务队列 task_queue 头部取出一个任务，路由到对应的工作节点（Worker）。"
+  - "工作节点执行失败时安排重试，最多 3 次；超过次数后降级到 chat 节点，让老人至少能收到一句可读回复。"
+  - "队列为空时判断收尾方式：多任务走 summarize 汇总，只有一个 chat 任务则直接结束。"
+
+rule:
+  - "本节点是纯代码决策节点，不调用大模型、不读外部知识，保证调度过程可复现、可审计。"
+  - "路由表（唯一事实来源，与代码中的 ROUTE_MAP 严格一致）：intent→intent、vitals→data_check、knowledge→rag、risk→risk、medication→remind、report→report、notify→notify、emotion→chat、chat→chat。"
+  - "失败判定：current_task 对应的 task_results[task] 的 status 等于 error 即视为失败。"
+  - "重试规则：失败且 retry_count 小于 3 时，不把任务放回队列，直接重新路由到同一个 Worker，并把 retry_count 加 1。"
+  - "降级规则：失败且 retry_count 大于等于 3 时，写入一个 chat 任务（args 的 content 说明该任务多次失败，请温和告知稍后再试并询问还有没有别的需要），retry_count 归零后转入 chat 节点。"
+  - "未知任务规则：任务名不在路由表中时，记录 WARNING 日志，把 current_task 换成 chat 任务并把原任务说明放进 args 的 content，转入 chat 节点，用户请求不能让流程崩溃。"
+  - "收尾规则：队列为空且 task_results 为空则走 summarize 兜底；队列为空且结果只有 chat 则直接结束；其余都走 summarize 汇总。"
+  - "路由必须用 Command(update=..., goto=...) 一次性完成取任务、改状态与跳转，不要拆成多步外部映射。"
+
+output:
+  - "只产出决策结果（状态更新与跳转目标），不产出任何自然语言回复。"
+  - "状态更新固定包含 task_queue（已取走一个任务）、current_task（当前任务）、retry_count。"
+  - "跳转目标只能是 intent、data_check、rag、risk、report、remind、notify、chat、summarize、END。"
+
+example:
+  - "场景：队列里有 vitals 与 risk，无失败，当前任务为 vitals。决策：task_queue 变为只剩 risk，current_task 为 vitals，retry_count 为 0，跳转 data_check。"
+  - "场景：当前任务 risk 的结果 status 为 error，retry_count 为 1。决策：retry_count 变为 2，跳转 risk。"
+  - "场景：当前任务 report 的结果 status 为 error，retry_count 为 3。决策：current_task 换成 chat（说明报告任务多次失败，请温和告知稍后再试），retry_count 归零，跳转 chat。"
+  - "场景：任务名为 weather_query（白名单外）。决策：记录未知任务日志，current_task 换成 chat（说明用户请求中有一部分无法识别），跳转 chat。"
+  - "场景：队列为空，task_results 含 vitals 与 risk。决策：跳转 summarize。"
+  - "场景：队列为空，task_results 只有 chat。决策：跳转 END。"

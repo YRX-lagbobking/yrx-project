@@ -1,0 +1,65 @@
+# =============================================================================
+# 依赖清单（契约第 22 节）
+# 安装：pip install -r requirements.txt
+#
+# 版本策略：只写下限（>=），不锁死上限，避免与 Python 3.11 环境冲突；
+#           硬件相关的可选依赖（pyaudio/vosk）若安装失败，请看 README 常见问题。
+# =============================================================================
+
+# ---------------- AI 编排（LangGraph + LangChain + 模型） ----------------
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+langgraph>=0.2.60
+langgraph-checkpoint-postgres>=2.0.0
+
+# ---------------- Web 服务 ----------------
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+pydantic>=2.8.0
+websockets>=12.0
+python-multipart>=0.0.9
+
+# ---------------- 存储（MySQL / PostgreSQL / Redis / InfluxDB / Milvus / Chroma） ----------------
+pymysql>=1.1.0
+psycopg[binary,pool]>=3.2.0
+redis>=5.0.0
+influxdb-client[async]>=1.44.0
+influxdb_client_3>=0.8.0
+pymilvus>=2.4.0
+chromadb>=0.5.0
+
+# ---------------- 异步任务（Celery + 定时） ----------------
+celery>=5.4.0
+apscheduler>=3.10.0
+
+# ---------------- 语音（离线识别 + 语音合成） ----------------
+vosk>=0.3.45
+pyaudio>=0.2.14
+edge-tts>=6.1.0
+
+# ---------------- 文档与数据（报告导出 / 统计） ----------------
+python-docx>=1.1.0
+pandas>=2.2.0
+numpy>=1.26.0
+pypdf>=4.3.0
+
+# ---------------- 安全（JWT + 校验） ----------------
+pyjwt>=2.9.0
+passlib>=1.7.4
+email-validator>=2.2.0
+
+# ---------------- 工具（MCP / 配置 / HTTP） ----------------
+mcp>=1.0.0
+pyyaml>=6.0.1
+requests>=2.32.0
+httpx>=0.27.0
+
+# ---------------- 混合检索 / 本地向量化与精排（新增） ----------------
+rank_bm25>=0.2.2               # BM25 稀疏检索（未安装时自动使用内置纯 Python 实现）
+jieba>=0.42.1                  # 中文分词（未安装时退化为 2-gram）
+sentence-transformers>=2.6.0   # 本地 embedding（bge-base-zh-v1.5）+ CrossEncoder 精排
+langchain-huggingface>=0.1.0   # HuggingFaceEmbeddings 接入 LangChain
+torch>=2.0                     # sentence-transformers 依赖（CPU 版即可）

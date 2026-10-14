@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能健康管家 · 老人端</title>
+    <!-- Vue2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+    <!-- Markdown 解析库 marked CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* ===================== 全局重置 & 字体 ===================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Microsoft YaHei', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            /* 浅色自然风景图片背景 */
+            background-image: url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=2940&auto=format&fit=crop');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        /* 主应用容器 —— 浅色毛玻璃 */
+        #app {
+            width: 1400px;
+            max-width: 99vw;
+            height: 94vh;
+            display: flex;
+            flex-direction: column;
+            border-radius: 36px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(18px) saturate(180%);
+            -webkit-backdrop-filter: blur(18px) saturate(180%);
+            box-shadow: 0 30px 50px -15px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            transition: all 0.3s;
+        }
+
+        /* ===================== 顶部免责声明条 ===================== */
+        .disclaimer-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 9px 20px;
+            font-size: 0.82rem;
+            color: #92400e;
+            background: rgba(254, 243, 199, 0.85);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(6px);
+            text-align: center;
+        }
+
+        .disclaimer-bar b { color: #b45309; }
+
+        /* 主体：左栏 + 主聊天区 */
+        .body-wrap {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+
+        /* ===================== 左侧栏 ===================== */
+        .sidebar {
+            width: 290px;
+            background: rgba(245, 250, 255, 0.65);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255, 255, 255, 0.9);
+            padding: 22px 12px 16px 12px;
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 6px 16px 6px;
+        }
+
+        .sidebar-header h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1e3a5f;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .new-chat-btn {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 6px 14px rgba(59, 130, 246, 0.1);
+            transition: all 0.2s;
+            line-height: 1;
+        }
+
+        .new-chat-btn:hover {
+            background: #ffffff;
+            transform: scale(1.04);
+            box-shadow: 0 8px 18px rgba(59, 130, 246, 0.2);
+        }
+
+        .side-card {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 14px;
+            margin: 0 4px 14px 4px;
+        }
+
+        .side-card h4 {
+            font-size: 0.86rem;
+            color: #1e3a5f;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .side-btn {
+            width: 100%;
+            border: 1px solid rgba(203, 220, 240, 0.9);
+            background: rgba(255, 255, 255, 0.95);
+            color: #1e3a5f;
+            font-size: 0.9rem;
+            font-weight: 550;
+            padding: 11px 12px;
+            border-radius: 16px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: all 0.18s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .side-btn:last-child { margin-bottom: 0; }
+
+        .side-btn:hover:not(:disabled) {
+            background: #ffffff;
+            border-color: #93c5fd;
+            color: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .side-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .side-btn.voice-on {
+            background: rgba(220, 252, 231, 0.95);
+            border-color: #86efac;
+            color: #166534;
+        }
+
+        .side-btn.danger {
+            background: rgba(254, 226, 226, 0.95);
+            border-color: #fecaca;
+            color: #b91c1c;
+        }
+
+        .voice-hint {
+            margin-top: 8px;
+            font-size: 0.76rem;
+            color: #64748b;
+            line-height: 1.6;
+            text-align: center;
+        }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 4px;
+            min-height: 60px;
+        }
+
+        .history-item {
+            background: transparent;
+            padding: 12px 14px;
+            border-radius: 16px;
+            font-size: 0.88rem;
+            color: #1e3a5f;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(185, 214, 255, 0.7);
+        }
+
+        .history-item.active {
+            background: #ffffff;
+            border-color: #93c5fd;
+            box-shadow: 0 6px 14px rgba(59, 130, 246, 0.12);
+            font-weight: 500;
+            color: #2563eb;
+        }
+
+        .history-title {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .history-del {
+            border: none;
+            background: transparent;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 0.9rem;
+            line-height: 1;
+            padding: 2px 5px;
+            border-radius: 8px;
+            opacity: 0;
+            transition: all 0.15s;
+        }
+
+        .history-item:hover .history-del { opacity: 1; }
+        .history-del:hover { background: #fee2e2; color: #dc2626; }
+
+        .history-list::-webkit-scrollbar,
+        .sidebar::-webkit-scrollbar { width: 5px; }
+
+        .history-list::-webkit-scrollbar-thumb,
+        .sidebar::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 20px; }
+
+        /* ===================== 主聊天区 ===================== */
+        .main-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.45);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            position: relative;
+            min-width: 0;
+        }
+
+        .chat-header {
+            padding: 20px 30px 12px 30px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.9);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .chat-header .title-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-header .title-area h2 {
+            font-size: 1.32rem;
+            font-weight: 650;
+            color: #0f2b4a;
+            letter-spacing: -0.02em;
+        }
+
+        .status-badge {
+            background: rgba(220, 252, 231, 0.95);
+            color: #166534;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 40px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .status-badge::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+        }
+
+        .status-badge.degraded {
+            background: rgba(254, 243, 199, 0.95);
+            color: #92400e;
+        }
+
+        .status-badge.degraded::before { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .header-link {
+            font-size: 0.86rem;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 8px 16px;
+            border-radius: 40px;
+            color: #1e3a5f;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+            transition: all 0.18s;
+            cursor: pointer;
+        }
+
+        .header-link:hover {
+            background: #ffffff;
+            color: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        /* 聊天记录区域 */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 30px 12px 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 20px; }
+
+        .message { display: flex; max-width: 85%; animation: fadeIn 0.2s ease; }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .message.bot { align-self: flex-start; }
+
+        .avatar {
+            width: 46px;
+            height: 46px;
+            border-radius: 16px;
+            background: rgba(238, 242, 255, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.35rem;
+            margin-right: 14px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .message.user .avatar {
+            margin-right: 0;
+            margin-left: 14px;
+            background: rgba(219, 234, 254, 0.95);
+        }
+
+        .message-bubble {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(4px);
+            padding: 15px 22px;
+            border-radius: 22px;
+            border-top-left-radius: 8px;
+            box-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.05);
+            font-size: 1.02rem;
+            line-height: 1.75;
+            color: #0f2b4a;
+            word-break: break-word;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .message.user .message-bubble {
+            background: #3b82f6;
+            color: #ffffff;
+            border-top-right-radius: 8px;
+            border-top-left-radius: 22px;
+            box-shadow: 0 10px 20px -8px rgba(59, 130, 246, 0.4);
+            backdrop-filter: none;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Markdown 内容样式 */
+        .message-bubble p { margin: 0 0 0.6rem 0; }
+        .message-bubble p:last-child { margin-bottom: 0; }
+        .message-bubble h1, .message-bubble h2, .message-bubble h3, .message-bubble h4 {
+            margin: 0.8rem 0 0.4rem 0; font-weight: 600; line-height: 1.3; color: #0f2b4a;
+        }
+        .message-bubble h1 { font-size: 1.42rem; }
+        .message-bubble h2 { font-size: 1.22rem; }
+        .message-bubble h3 { font-size: 1.08rem; }
+        .message-bubble ul, .message-bubble ol { margin: 0.5rem 0 0.5rem 1.4rem; padding-left: 0.8rem; }
+        .message-bubble li { margin-bottom: 0.3rem; }
+        .message-bubble pre {
+            background: #f1f5f9; border-radius: 12px; padding: 14px 18px; margin: 0.7rem 0;
+            overflow-x: auto; border: 1px solid #e2e8f0;
+        }
+        .message-bubble pre code {
+            background: transparent; padding: 0; font-size: 0.85rem;
+            font-family: 'JetBrains Mono', Consolas, monospace; color: #1e293b;
+        }
+        .message-bubble code {
+            background: rgba(59, 130, 246, 0.08); color: #1e40af; padding: 2px 6px;
+            border-radius: 6px; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 0.88rem;
+        }
+        .message-bubble blockquote {
+            margin: 0.7rem 0; padding: 0.5rem 1rem; border-left: 4px solid #93c5fd;
+            background: #f8fafc; border-radius: 0 8px 8px 0; color: #475569;
+        }
+        .message-bubble blockquote p { margin: 0; }
+        .message-bubble a { color: #2563eb; text-decoration: none; border-bottom: 1px dashed #93c5fd; }
+        .message-bubble table { border-collapse: collapse; width: 100%; margin: 0.7rem 0; font-size: 0.9rem; }
+        .message-bubble th, .message-bubble td { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+        .message-bubble th { background: #f8fafc; font-weight: 600; color: #1e3a5f; }
+        .message-bubble hr { border: none; border-top: 1px solid #e2e8f0; margin: 1rem 0; }
+
+        .message.user .message-bubble code { background: rgba(255, 255, 255, 0.2); color: #e0eaff; }
+        .message.user .message-bubble a { color: #d9e9ff; border-bottom-color: rgba(255, 255, 255, 0.5); }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            margin: auto;
+            color: #4a6a8b;
+            font-size: 0.98rem;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 40px 50px;
+            border-radius: 50px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        .empty-state i { font-size: 3rem; font-style: normal; opacity: 0.75; }
+
+        .quick-asks { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 520px; }
+
+        .quick-ask {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(185, 214, 255, 0.9);
+            color: #1e3a5f;
+            font-size: 0.88rem;
+            padding: 9px 16px;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+
+        .quick-ask:hover { background: #ffffff; color: #2563eb; border-color: #93c5fd; }
+
+        /* 底部输入区 */
+        .input-area {
+            padding: 16px 30px 20px 30px;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-top: 1px solid rgba(255, 255, 255, 0.9);
+            flex-shrink: 0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(4px);
+            border-radius: 60px;
+            padding: 5px 5px 5px 24px;
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            transition: all 0.2s;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.03);
+            gap: 8px;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12), 0 8px 20px rgba(0, 0, 0, 0.05);
+            background: #ffffff;
+        }
+
+        .input-wrapper input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 1.02rem;
+            padding: 14px 8px 14px 0;
+            color: #0f2b4a;
+            min-width: 0;
+        }
+
+        .input-wrapper input::placeholder { color: #94a3b8; }
+
+        .input-wrapper button {
+            background: #3b82f6;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.96rem;
+            padding: 13px 26px;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 10px 18px -8px #3b82f6;
+            white-space: nowrap;
+        }
+
+        .input-wrapper button:hover:not(:disabled) {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .input-wrapper button:active:not(:disabled) { transform: scale(0.97); }
+        .input-wrapper button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+
+        .input-wrapper button.ghost {
+            background: rgba(255, 255, 255, 0.95);
+            color: #1e3a5f;
+            border: 1px solid rgba(203, 220, 240, 0.95);
+            box-shadow: none;
+        }
+
+        .input-wrapper button.ghost:hover:not(:disabled) { background: #ffffff; color: #2563eb; }
+
+        .input-hint {
+            margin-top: 10px;
+            font-size: 0.78rem;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* ===================== 告警弹窗 ===================== */
+        .alert-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 43, 74, 0.28);
+            backdrop-filter: blur(6px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 99;
+            padding: 20px;
+        }
+
+        .alert-card {
+            width: 520px;
+            max-width: 96vw;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(18px) saturate(180%);
+            border-radius: 32px;
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.3);
+            padding: 28px 30px 24px 30px;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .alert-card .alert-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .alert-card .alert-head .icon {
+            width: 52px; height: 52px; border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.7rem; flex-shrink: 0;
+        }
+
+        .alert-card.high .alert-head .icon { background: rgba(254, 226, 226, 0.95); }
+        .alert-card.mid .alert-head .icon { background: rgba(254, 243, 199, 0.95); }
+        .alert-card.low .alert-head .icon { background: rgba(219, 234, 254, 0.95); }
+
+        .alert-card .alert-head h3 { font-size: 1.2rem; color: #0f2b4a; font-weight: 650; }
+
+        .level-tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 3px 12px;
+            border-radius: 30px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .level-tag.高危 { background: #fee2e2; color: #b91c1c; }
+        .level-tag.中危 { background: #fef3c7; color: #92400e; }
+        .level-tag.低危 { background: #dbeafe; color: #1d4ed8; }
+
+        .alert-body {
+            font-size: 0.98rem;
+            line-height: 1.8;
+            color: #1e3a5f;
+            max-height: 46vh;
+            overflow-y: auto;
+            background: rgba(248, 250, 252, 0.9);
+            border-radius: 20px;
+            padding: 16px 18px;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+        }
+
+        .alert-actions { display: flex; gap: 12px; margin-top: 20px; }
+
+        .alert-actions button {
+            flex: 1;
+            border-radius: 40px;
+            padding: 14px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.2s;
+        }
+
+        .alert-actions .confirm {
+            background: #22c55e;
+            color: #ffffff;
+            box-shadow: 0 10px 18px -8px #22c55e;
+        }
+
+        .alert-actions .confirm:hover { background: #16a34a; }
+
+        .alert-actions .later {
+            background: rgba(255, 255, 255, 0.95);
+            color: #1e3a5f;
+            border: 1px solid rgba(203, 220, 240, 0.95);
+        }
+
+        .alert-actions .later:hover { background: #ffffff; color: #2563eb; }
+
+        /* 顶部轻提示 */
+        .toast {
+            position: fixed;
+            top: 26px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            color: #0f2b4a;
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.3);
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            z-index: 200;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===================== 语音聆听浮层（波形可视化） ===================== */
+        .voice-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 12, 26, 0.55);
+            backdrop-filter: blur(3px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 180;
+        }
+
+        .voice-card {
+            width: min(720px, 92vw);
+            background: linear-gradient(160deg, #0f2b4a, #123c66);
+            border: 1px solid rgba(120, 190, 255, 0.25);
+            border-radius: 20px;
+            box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.75);
+            padding: 20px 24px 16px;
+            color: #e8f2ff;
+        }
+
+        .voice-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+        }
+
+        .voice-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #64748b;
+            flex: none;
+        }
+
+        .voice-dot.live {
+            background: #22d3ee;
+            animation: voicePulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes voicePulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.14); }
+            50%      { box-shadow: 0 0 0 12px rgba(34, 211, 238, 0.05); }
+        }
+
+        .voice-tip { margin-left: auto; font-size: 0.82rem; color: #9fc4e8; }
+
+        .voice-card canvas {
+            width: 100%;
+            height: 130px;
+            display: block;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .voice-partial {
+            min-height: 34px;
+            margin-top: 12px;
+            font-size: 1.05rem;
+            color: #eaf6ff;
+            word-break: break-all;
+        }
+
+        .voice-foot {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+            font-size: 0.76rem;
+            color: #7fa6c9;
+        }
+
+        .voice-stop {
+            margin-left: auto;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 20px;
+            font-size: 0.9rem;
+            color: #ffffff;
+            background: linear-gradient(135deg, #ef4444, #f97316);
+            cursor: pointer;
+        }
+
+        /* ===================== 响应式 ===================== */
+        @media (max-width: 1000px) {
+            .sidebar { width: 230px; padding: 16px 8px; }
+            .chat-messages { padding: 16px 18px; }
+            .input-area { padding: 14px 18px 16px; }
+            .message { max-width: 95%; }
+            .avatar { width: 38px; height: 38px; font-size: 1.1rem; }
+            .message-bubble { padding: 12px 16px; font-size: 0.98rem; }
+        }
+
+        @media (max-width: 720px) {
+            .sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- ============ 免责声明（全站统一，NFR-03 / R-08） ============ -->
+        <div class="disclaimer-bar">
+            ⚕️ 本系统仅提供健康提示，<b>不构成医疗诊断</b>；紧急情况请拨打 <b>120</b>
+        </div>
+
+        <div class="body-wrap">
+            <!-- ============ 左侧栏 ============ -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h3><i>📋</i> 对话记录</h3>
+                    <button class="new-chat-btn" @click="newChat" title="开始新对话">＋</button>
+                </div>
+
+                <!-- 语音交互区 -->
+                <div class="side-card">
+                    <h4><i>🎤</i> 语音助手</h4>
+                    <button class="side-btn" :class="{ 'voice-on': voiceOn }"
+                            @click="startVoice" :disabled="voiceOn || voiceBusy">
+                        {{ voiceBusy ? '识别中…' : (voiceOn ? '🎙️ 正在聆听…' : '🎙️ 开启语音') }}
+                    </button>
+                    <button class="side-btn danger" @click="stopVoice" :disabled="!voiceOn">
+                        ⏹️ 停止聆听
+                    </button>
+                    <div class="voice-hint">
+                        点"开启语音"后直接说话，说完自动发送；<br>想中断就说"停止"或点上面的停止按钮。
+                    </div>
+                </div>
+
+                <!-- 快捷入口 -->
+                <div class="side-card">
+                    <h4><i>⚡</i> 常用功能</h4>
+                    <button class="side-btn" @click="go('/static/report.html')">📄 我的健康报告</button>
+                    <button class="side-btn" @click="quickAsk('帮我看看今天的身体情况')">💓 今天的身体情况</button>
+                    <button class="side-btn" @click="quickAsk('今天该吃什么药')">💊 今天该吃什么药</button>
+                    <button class="side-btn" @click="quickAsk('我最近血压怎么样')">🩺 最近血压怎么样</button>
+                </div>
+
+                <!-- 会话列表 -->
+                <div class="history-list">
+                    <div v-for="(h, i) in historyList" :key="h.sessionId || i"
+                         class="history-item" :class="{ active: i === activeIndex }"
+                         @click="switchHistory(i)">
+                        <i>💬</i><span class="history-title">{{ h.title }}</span>
+                        <button class="history-del" title="删除该会话" @click.stop="deleteHistory(i)">🗑</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- ============ 主聊天区 ============ -->
+            <main class="main-panel">
+                <div class="chat-header">
+                    <div class="title-area">
+                        <h2>🏡 智能健康管家</h2>
+                        <span class="status-badge" :class="{ degraded: mode !== 'full' }">
+                            {{ modeText }}
+                        </span>
+                    </div>
+                    <div class="header-actions">
+                        <a class="header-link" href="/static/report.html">📄 我的报告</a>
+                        <span class="header-link" @click="logout">👤 {{ userName || userId || '访客' }} · 退出</span>
+                    </div>
+                </div>
+
+                <!-- 消息区 -->
+                <div class="chat-messages" ref="chatMessages">
+                    <div v-if="chatList.length === 0" class="empty-state">
+                        <i>💬</i>
+                        <span>您好，我是您的健康管家，可以点左边的"开启语音"直接说话，<br>也可以点下面的一句话快速提问。</span>
+                        <div class="quick-asks">
+                            <div class="quick-ask" v-for="(q, i) in quickList" :key="i" @click="quickAsk(q)">{{ q }}</div>
+                        </div>
+                    </div>
+
+                    <div v-for="(msg, idx) in chatList" :key="idx" class="message" :class="msg.role">
+                        <div class="avatar">{{ msg.role === 'user' ? '👴' : '🤖' }}</div>
+                        <div class="message-bubble" v-html="formatMessage(msg.content)"></div>
+                    </div>
+                </div>
+
+                <!-- 输入区 -->
+                <div class="input-area">
+                    <div class="input-wrapper">
+                        <input type="text" v-model="input" ref="inputField"
+                               placeholder="说点什么… 例如：我今天血压怎么样"
+                               @keyup.enter="send">
+                        <button class="ghost" @click="startVoice" :disabled="voiceOn || voiceBusy">🎙️ 语音</button>
+                        <button @click="send" :disabled="loading">
+                            <span>{{ loading ? '回答中' : '发送' }}</span>
+                            <span style="font-size: 1.1rem;">↵</span>
+                        </button>
+                    </div>
+                    <div class="input-hint">
+                        <span v-if="voiceText" style="color: #2563eb;">🎙️ 正在识别：{{ voiceText }}</span>
+                        <span v-else>语音播报：{{ ttsEnabled ? '已开启（回答会自动读给您听）' : '已关闭' }}</span>
+                        <span style="cursor: pointer; color: #2563eb;" @click="ttsEnabled = !ttsEnabled">
+                            {{ ttsEnabled ? '关闭播报' : '开启播报' }}
+                        </span>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- ============ 语音聆听浮层（波形可视化） ============ -->
+        <div class="voice-mask" v-if="voiceOn || voiceBusy">
+            <div class="voice-card">
+                <div class="voice-head">
+                    <span class="voice-dot" :class="{ live: voiceMicOn }"></span>
+                    <strong>语音输入</strong>
+                    <span class="voice-tip">{{ voiceStatus || '正在连接…' }}</span>
+                </div>
+                <canvas ref="voiceCanvas" width="640" height="130"></canvas>
+                <div class="voice-partial">{{ voiceText || '…' }}</div>
+                <div class="voice-foot">
+                    <span>波形来自浏览器麦克风；识别由服务端麦克风完成</span>
+                    <button class="voice-stop" @click="stopVoice">停止</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ 实时告警弹窗 ============ -->
+        <div class="alert-mask" v-if="alertPopup">
+            <div class="alert-card" :class="alertPopup.cls">
+                <div class="alert-head">
+                    <div class="icon">{{ alertPopup.level === '高危' ? '🚨' : (alertPopup.level === '中危' ? '⚠️' : 'ℹ️') }}</div>
+                    <h3>
+                        健康提醒
+                        <span class="level-tag" :class="alertPopup.level">{{ alertPopup.level }}</span>
+                    </h3>
+                </div>
+                <div class="alert-body" v-html="formatMessage(alertPopup.message)"></div>
+                <div class="alert-actions">
+                    <button class="confirm" @click="confirmAlert">✅ 我已知道</button>
+                    <button class="later" @click="alertPopup = null">稍后再说</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 轻提示 -->
+        <div class="toast" v-if="toast">{{ toast }}</div>
+    </div>
+
+    <script>
+        // ===== marked 配置（与 exam_0914 一致） =====
+        marked.setOptions({ breaks: true, gfm: true, headerIds: false, mangle: false });
+
+        new Vue({
+            el: '#app',
+            data: {
+                // ---- 身份 ----
+                userId: '',
+                userName: '',
+                role: 'elder',
+                token: '',
+
+                // ---- 会话（列表与消息都持久化在后端，刷新/重启后从 GET /sessions 恢复） ----
+                sessionId: '',
+                historyList: [],          // [{sessionId, title, updateTime, messages, loaded}]
+                activeIndex: -1,
+                chatList: [],
+
+                // ---- 输入与流式 ----
+                input: '',
+                loading: false,
+                eventSource: null,
+
+                // ---- 语音 ----
+                voiceWs: null,
+                voiceOn: false,
+                voiceBusy: false,
+                voiceText: '',            // 语音实时中间结果（partial）：只展示、不发送
+                voiceStatus: '',          // 语音浮层状态文案
+                voiceLevels: [],          // 波形柱的平滑音量（0~1）
+                voiceAnim: null,          // requestAnimationFrame 句柄
+                voiceAudioCtx: null,      // 浏览器侧 AudioContext（仅用于可视化）
+                voiceAnalyser: null,      // 频谱分析器
+                voiceStream: null,        // 浏览器侧麦克风流
+                voiceMicOn: false,        // 浏览器麦克风是否已就绪（驱动那个小圆点）
+                voiceLastSound: 0,        // 最近一次检测到声音的时间戳
+                meterBars: 48,            // 波形柱数量
+                voiceTimer: null,
+                ttsEnabled: true,
+                currentAudio: null,
+
+                // ---- 实时告警 ----
+                notifyWs: null,
+                notifyTimer: null,
+                alertPopup: null,
+                toast: '',
+                toastTimer: null,
+
+                // ---- 系统状态 ----
+                mode: 'full',
+
+                quickList: [
+                    '帮我看看今天的身体情况',
+                    '今天该吃什么药',
+                    '我一个人在家有点害怕',
+                    '帮我生成这周的健康报告'
+                ]
+            },
+
+            computed: {
+                modeText() {
+                    if (this.mode === 'full') return '服务正常';
+                    if (this.mode === 'partial') return '部分功能降级';
+                    return '只读模式';
+                }
+            },
+
+            mounted() {
+                // 1. 校验登录态
+                this.token = localStorage.getItem('token') || '';
+                this.userId = localStorage.getItem('user_id') || '';
+                this.userName = localStorage.getItem('user_name') || '';
+                this.role = localStorage.getItem('role') || 'elder';
+                if (!this.token) {
+                    this.tip('登录已过期，请重新登录');
+                    setTimeout(() => location.href = '/static/login.html', 1200);
+                    return;
+                }
+                // 2. 先拉历史会话列表（后端持久化）：有历史就打开最近一条，没有才新建
+                this.loadSessions().then(() => {
+                    if (this.historyList && this.historyList.length) {
+                        this.switchHistory(0);
+                    } else {
+                        this.createSession();
+                    }
+                });
+                // 3. 建立实时告警通道
+                this.connectNotify();
+                // 4. 拉取系统健康状态（降级时顶部横幅提示）
+                this.checkHealth();
+            },
+
+            beforeDestroy() {
+                this.closeSSE();
+                this.stopVoice();
+                if (this.notifyWs) { try { this.notifyWs.close(); } catch (e) {} }
+                if (this.notifyTimer) clearInterval(this.notifyTimer);
+            },
+
+            methods: {
+                // ================= 工具方法 =================
+                tip(text) {
+                    this.toast = text;
+                    if (this.toastTimer) clearTimeout(this.toastTimer);
+                    this.toastTimer = setTimeout(() => { this.toast = ''; }, 2600);
+                },
+
+                go(url) { location.href = url; },
+
+                logout() {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user_id');
+                    localStorage.removeItem('user_name');
+                    localStorage.removeItem('role');
+                    location.href = '/static/login.html';
+                },
+
+                authHeaders(extra) {
+                    const h = Object.assign({ 'Authorization': 'Bearer ' + this.token }, extra || {});
+                    return h;
+                },
+
+                /** 统一鉴权请求：401 直接回登录页 */
+                authFetch(url, options) {
+                    const opt = Object.assign({}, options || {});
+                    opt.headers = this.authHeaders(opt.headers || {});
+                    return fetch(url, opt).then(res => {
+                        if (res.status === 401 || res.status === 403) {
+                            this.tip('登录状态失效，请重新登录');
+                            setTimeout(() => location.href = '/static/login.html', 1200);
+                        }
+                        return res;
+                    });
+                },
+
+                /** 把后端返回的 detail 转成可读文本 */
+                pickDetail(res, fallback) {
+                    if (!res) return fallback;
+                    let d = res.detail !== undefined ? res.detail : (res.msg || res.message);
+                    if (d === undefined || d === null) return fallback;
+                    if (Array.isArray(d)) return d.map(x => (x && x.msg) ? x.msg : JSON.stringify(x)).join('；');
+                    if (typeof d === 'object') return JSON.stringify(d);
+                    return String(d);
+                },
+
+                /** Markdown 渲染（marked） */
+                formatMessage(content) {
+                    if (!content) return '';
+                    try {
+                        return marked.parse(content);
+                    } catch (e) {
+                        return String(content).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    }
+                },
+
+                scrollToBottom() {
+                    this.$nextTick(() => {
+                        const c = this.$refs.chatMessages;
+                        if (c) c.scrollTop = c.scrollHeight;
+                    });
+                },
+
+                // ================= 会话管理 =================
+                /** 拉取历史会话列表（GET /sessions）：数据源是后端 PostgreSQL，刷新/重启后仍在 */
+                loadSessions() {
+                    return fetch('/sessions', { headers: this.authHeaders() })
+                        .then(res => res.json())
+                        .then(res => {
+                            const rows = (res && (res.data || res.rows)) || [];
+                            if (!Array.isArray(rows) || !rows.length) return;
+                            const byId = {};
+                            this.historyList.forEach(h => { byId[h.sessionId] = h; });
+                            this.historyList = rows.map(r => {
+                                const old = byId[r.session_id];
+                                return {
+                                    sessionId: r.session_id,
+                                    title: r.title || '历史对话',
+                                    updateTime: r.update_time || 0,
+                                    messages: (old && old.messages) || [],
+                                    loaded: (old && old.loaded) || false
+                                };
+                            });
+                            console.log('历史会话数：', this.historyList.length);
+                        })
+                        .catch(() => { /* 后端不可用：保留内存列表，聊天仍可用 */ });
+                },
+
+                /** 打开某个历史会话：从后端拉该会话的历史消息（PostgreSQL chat_message 表） */
+                openSession(sid) {
+                    const h = this.historyList.find(x => x.sessionId === sid);
+                    if (!h) return;
+                    this.sessionId = sid;
+                    sessionStorage.setItem('session_id', sid);
+                    this.chatList = [];
+                    fetch('/session/history?session_id=' + encodeURIComponent(sid), { headers: this.authHeaders() })
+                        .then(res => res.json())
+                        .then(res => {
+                            const data = (res && res.data) || {};
+                            const msgs = Array.isArray(data) ? data : (data.messages || []);
+                            this.chatList = msgs.map(m => ({
+                                role: m.role === 'user' ? 'user' : 'bot',
+                                content: m.content || ''
+                            }));
+                            if (data.title) h.title = data.title;
+                            this.scrollToBottom();
+                        })
+                        .catch(() => this.tip('历史记录加载失败'));
+                },
+
+                /** 删除会话（会话索引 + 该会话消息一起删；删的是当前会话则自动切换/新建） */
+                deleteHistory(i) {
+                    const h = this.historyList[i];
+                    if (!h || !h.sessionId) return;
+                    if (!confirm('删除会话「' + h.title + '」？删除后不可恢复。')) return;
+                    fetch('/session?session_id=' + encodeURIComponent(h.sessionId),
+                          { method: 'DELETE', headers: this.authHeaders() })
+                        .then(res => res.json())
+                        .then(res => {
+                            if (!res || res.code !== 200) { this.tip((res && res.msg) || '删除失败'); return; }
+                            const wasActive = (i === this.activeIndex);
+                            this.historyList.splice(i, 1);
+                            if (wasActive) {
+                                this.chatList = [];
+                                this.sessionId = '';
+                                sessionStorage.removeItem('session_id');
+                                if (this.historyList.length) this.switchHistory(0);
+                                else this.newChat();
+                            } else if (i < this.activeIndex) {
+                                this.activeIndex -= 1;
+                            }
+                        })
+                        .catch(() => this.tip('删除失败'));
+                },
+
+                /** 回答结束后刷新列表顺序与标题（与后端保持一致） */
+                refreshSessions() {
+                    const cur = this.sessionId;
+                    fetch('/sessions', { headers: this.authHeaders() })
+                        .then(res => res.json())
+                        .then(res => {
+                            const rows = (res && (res.data || res.rows)) || [];
+                            if (!Array.isArray(rows) || !rows.length) return;
+                            const byId = {};
+                            this.historyList.forEach(h => { byId[h.sessionId] = h; });
+                            this.historyList = rows.map(r => {
+                                const old = byId[r.session_id];
+                                return {
+                                    sessionId: r.session_id,
+                                    title: r.title || (old && old.title) || '历史对话',
+                                    updateTime: r.update_time || 0,
+                                    messages: (old && old.messages) || [],
+                                    loaded: (old && old.loaded) || false
+                                };
+                            });
+                            const idx = this.historyList.findIndex(h => h.sessionId === cur);
+                            this.activeIndex = idx >= 0 ? idx : 0;
+                        })
+                        .catch(() => {});
+                },
+
+                /** POST /create_session：新建会话（后端同时写 Redis 与 PostgreSQL 会话索引） */
+                createSession() {
+                    const body = { user_id: this.userId };
+                    const cached = sessionStorage.getItem('session_id');
+                    if (cached) body.session_id = cached;
+
+                    return fetch('/create_session', {
+                        method: 'POST',
+                        headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                        body: JSON.stringify(body)
+                    })
+                        .then(res => res.json().then(b => ({ status: res.status, body: b })))
+                        .then(({ status, body }) => {
+                            if (status !== 200) {
+                                this.tip(this.pickDetail(body, '会话创建失败'));
+                                return;
+                            }
+                            const sid = (body && body.data !== undefined) ? body.data
+                                      : (body && (body.session_id || body.sessionId));
+                            if (typeof sid === 'string' && sid) {
+                                this.sessionId = sid;
+                                sessionStorage.setItem('session_id', sid);
+                                console.log('会话 ID：', sid);
+                                // 新会话置顶到历史列表（本地即时可见，后端已同步落库）
+                                const exist = this.historyList.findIndex(h => h.sessionId === sid);
+                                if (exist === -1) {
+                                    this.historyList.unshift({
+                                        sessionId: sid, title: '新的对话',
+                                        updateTime: Date.now() / 1000, messages: [], loaded: true
+                                    });
+                                    this.activeIndex = 0;
+                                    this.chatList = [];
+                                } else {
+                                    this.activeIndex = exist;
+                                }
+                            }
+                        })
+                        .catch(err => this.tip('会话创建失败：' + err));
+                },
+
+                newChat() {
+                    if (this.historyList[this.activeIndex]) {
+                        this.historyList[this.activeIndex].messages = this.chatList.slice();
+                    }
+                    this.chatList = [];
+                    this.input = '';
+                    this.closeSSE();
+                    // 新对话 = 新会话（清掉旧 session_id 后重新申请；后端会写入历史索引）
+                    sessionStorage.removeItem('session_id');
+                    this.sessionId = '';
+                    this.createSession();
+                    this.$nextTick(() => { if (this.$refs.inputField) this.$refs.inputField.focus(); });
+                },
+
+                switchHistory(i) {
+                    if (i === this.activeIndex && this.chatList.length) return;
+                    if (this.historyList[this.activeIndex]) {
+                        this.historyList[this.activeIndex].messages = this.chatList.slice();
+                    }
+                    this.activeIndex = i;
+                    const h = this.historyList[i];
+                    if (h && h.sessionId) {
+                        this.openSession(h.sessionId);     // 历史消息从后端取（首次拉取）
+                    } else {
+                        this.scrollToBottom();
+                    }
+                },
+
+                applyTitle(question) {
+                    const h = this.historyList[this.activeIndex];
+                    if (h && (h.title === '新的对话' || !h.title)) {
+                        h.title = question.length > 12 ? question.slice(0, 12) + '…' : question;
+                    }
+                },
+
+                // ================= 发送（SSE） =================
+                quickAsk(q) {
+                    this.input = q;
+                    this.send();
+                },
+
+                send() {
+                    const question = (this.input || '').trim();
+                    if (!question || this.loading) return;
+
+                    this.applyTitle(question);
+                    this.chatList.push({ role: 'user', content: question });
+                    this.input = '';
+                    this.scrollToBottom();
+
+                    const botMsg = { role: 'bot', content: '正在思考，请稍等…' };
+                    this.chatList.push(botMsg);
+                    this.loading = true;
+                    this.scrollToBottom();
+
+                    this.closeSSE();
+
+                    // GET /chat?question=&user_id=&session_id=（SSE 逐段推送）
+                    const params = 'question=' + encodeURIComponent(question)
+                        + '&user_id=' + encodeURIComponent(this.userId)
+                        + '&session_id=' + encodeURIComponent(this.sessionId)
+                        + '&token=' + encodeURIComponent(this.token);
+                    const es = new EventSource('/chat?' + params);
+                    this.eventSource = es;
+
+                    es.onmessage = (e) => {
+                        let data;
+                        try { data = JSON.parse(e.data); } catch (err) { return; }
+                        if (data.done) {
+                            this.loading = false;
+                            this.closeSSE();
+                            this.saveCurrentHistory();
+                            this.refreshSessions();
+                            // 回答结束 → 语音播报
+                            const text = (botMsg.content || '').replace(/正在思考，请稍等…/, '');
+                            if (this.ttsEnabled && text) this.speak(text);
+                            return;
+                        }
+                        if (botMsg.content.indexOf('正在思考') > -1) botMsg.content = '';
+                        botMsg.content += (data.data || '');
+                        this.scrollToBottom();
+                    };
+
+                    es.onerror = () => {
+                        this.loading = false;
+                        this.closeSSE();
+                        if (!botMsg.content || botMsg.content.indexOf('正在思考') > -1) {
+                            botMsg.content = '⚠️ 连接中断了，请再问一次。如果身体很不舒服，请马上联系家里人，紧急情况拨打 120。';
+                        }
+                        this.saveCurrentHistory();
+                    };
+                },
+
+                saveCurrentHistory() {
+                    const h = this.historyList[this.activeIndex];
+                    if (h) h.messages = this.chatList.slice();
+                },
+
+                closeSSE() {
+                    if (this.eventSource) {
+                        try { this.eventSource.close(); } catch (e) {}
+                        this.eventSource = null;
+                    }
+                },
+
+                // ================= 语音输入（WebSocket） =================
+                /** ws://host/voice/ws：服务端推识别文本；"开始说话"表示可以说了 */
+                startVoice() {
+                    if (this.voiceOn) {
+                        // 上一次连接可能已失效但状态没复位（异常关闭/网络抖动）：允许强制重连，
+                        // 否则按钮会"点了没反应"（这也是"语音老是没反应"的一个原因）。
+                        if (this.voiceWs && this.voiceWs.readyState === WebSocket.OPEN) return;
+                        this.resetVoice();
+                    }
+                    let url = 'ws://' + location.host + '/voice/ws';
+                    if (this.token) url += '?token=' + encodeURIComponent(this.token);
+                    let ws;
+                    try {
+                        ws = new WebSocket(url);
+                    } catch (e) {
+                        this.tip('当前浏览器不支持语音连接');
+                        return;
+                    }
+                    this.voiceWs = ws;
+                    this.voiceOn = true;      // 立即禁用"开启语音"按钮，避免重复建连
+                    this.voiceBusy = false;
+                    this.voiceStatus = '正在打开麦克风…';
+                    this.startMicMeter();     // 浏览器侧独立采音，仅用于波形可视化
+                    const self = this;
+
+                    // 兜底：部分实现不会推"开始说话"而是直接开始识别，
+                    // 3 秒后仍没收到握手指令就自行切到"正在聆听"，避免按钮一直卡住
+                    if (this.voiceTimer) clearTimeout(this.voiceTimer);
+                    this.voiceTimer = setTimeout(function () {
+                        if (self.voiceWs === ws && !self.voiceBusy) {
+                            self.voiceBusy = true;
+                            self.tip('请开始说话，说完我自动发送');
+                        }
+                    }, 3000);
+
+                    ws.onopen = function () {
+                        console.log('语音通道已连接');
+                        self.tip('正在打开麦克风，请稍候…');
+                    };
+
+                    ws.onmessage = function (e) {
+                        let raw = e.data;
+                        let text = raw;
+                        let kind = 'asr';
+                        // 协议：{type:"ready|partial|asr|tip", text:"..."}；兼容旧版纯文本推送
+                        try {
+                            const obj = JSON.parse(raw);
+                            if (obj && typeof obj === 'object') {
+                                if (obj.type) kind = obj.type;
+                                if (obj.text !== undefined) text = obj.text;
+                                if (obj.msg !== undefined) text = obj.msg;
+                            }
+                        } catch (err) { /* 纯文本：按识别结果处理 */ }
+
+                        text = String(text || '').trim();
+                        if (!text) return;
+
+                        // ① ready：麦克风已就绪，明确告诉用户可以说话了（避免抢跑丢字）
+                        if (kind === 'ready' || text.indexOf('开始说话') > -1) {
+                            self.voiceBusy = true;
+                            self.voiceOn = true;
+                            self.voiceText = '';
+                            self.voiceStatus = '麦克风已就绪，请开始说话';
+                            self.tip('请开始说话，说完我自动发送');
+                            return;
+                        }
+                        // ② partial：实时中间结果，只展示在输入框下方，绝不发送
+                        if (kind === 'partial') {
+                            self.voiceText = text;
+                            self.voiceStatus = '正在识别…';
+                            return;
+                        }
+                        // ③ tip：提示类（如"语音识别不可用"）只弹提示，不能被当成用户输入
+                        if (kind === 'tip') {
+                            self.tip(text);
+                            self.resetVoice();
+                            return;
+                        }
+                        // ④ asr：一句话识别完成 → 填入输入框 → 关闭本句连接 → 自动发送
+                        self.voiceText = '';
+                        self.input = text;
+                        self.resetVoice();
+                        self.send();
+                    };
+
+                    ws.onerror = function () {
+                        self.tip('语音通道连接失败，请检查麦克风与后端服务');
+                        self.resetVoice();
+                    };
+
+                    ws.onclose = function () {
+                        self.voiceOn = false;
+                        self.voiceBusy = false;
+                    };
+                },
+
+                /** 停止聆听：向服务端发送"停止"文本后关闭连接 */
+                stopVoice() {
+                    if (this.voiceWs && this.voiceWs.readyState === WebSocket.OPEN) {
+                        try { this.voiceWs.send('停止'); } catch (e) {}
+                    }
+                    this.resetVoice();
+                },
+
+                // ================= 语音波形（浏览器侧采音可视化） =================
+                /**
+                 * 打开浏览器麦克风并开始画波形。
+                 *
+                 * 说明：这里只为"看得见声音有没有进来"；真正的识别仍由服务端 Vosk
+                 *       读取服务器麦克风完成，两条链路互不干扰（本机演示时是同一个物理麦克风）。
+                 * 注意：getUserMedia 需要安全上下文（https 或 localhost），
+                 *       局域网 IP 访问时浏览器会拒绝，此时只提示、不影响识别。
+                 */
+                async startMicMeter() {
+                    this.voiceMicOn = false;
+                    this.voiceLastSound = Date.now();
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        this.voiceStatus = '当前环境不支持麦克风波形（需 https 或 localhost）';
+                        return;
+                    }
+                    try {
+                        this.voiceStream = await navigator.mediaDevices.getUserMedia({
+                            audio: { echoCancellation: true, noiseSuppression: true }
+                        });
+                    } catch (e) {
+                        this.voiceStatus = '浏览器未授权麦克风，波形不可用（识别仍走服务端麦克风）';
+                        return;
+                    }
+                    try {
+                        const Ctx = window.AudioContext || window.webkitAudioContext;
+                        this.voiceAudioCtx = new Ctx();
+                        const src = this.voiceAudioCtx.createMediaStreamSource(this.voiceStream);
+                        this.voiceAnalyser = this.voiceAudioCtx.createAnalyser();
+                        this.voiceAnalyser.fftSize = 1024;
+                        this.voiceAnalyser.smoothingTimeConstant = 0.75;
+                        src.connect(this.voiceAnalyser);
+                        this.voiceLevels = new Array(this.meterBars).fill(0);
+                        this.voiceMicOn = true;
+                        if (!this.voiceStatus) this.voiceStatus = '正在打开麦克风…';
+                        const loop = () => {
+                            if (!this.voiceAnalyser || !(this.voiceOn || this.voiceBusy)) return;
+                            this.drawMeter();
+                            this.voiceAnim = requestAnimationFrame(loop);
+                        };
+                        this.voiceAnim = requestAnimationFrame(loop);
+                    } catch (e) {
+                        this.voiceStatus = '波形初始化失败：' + e;
+                        this.stopMicMeter();
+                    }
+                },
+
+                /** 停止画波形并释放浏览器麦克风 */
+                stopMicMeter() {
+                    if (this.voiceAnim) { cancelAnimationFrame(this.voiceAnim); this.voiceAnim = null; }
+                    if (this.voiceStream) {
+                        try { this.voiceStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+                        this.voiceStream = null;
+                    }
+                    if (this.voiceAudioCtx) {
+                        try { this.voiceAudioCtx.close(); } catch (e) {}
+                        this.voiceAudioCtx = null;
+                    }
+                    this.voiceAnalyser = null;
+                    this.voiceLevels = [];
+                    this.voiceMicOn = false;
+                },
+
+                /** 把频谱聚合成 48 根居中对称的圆角柱，并顺带判断"有没有声音进来" */
+                drawMeter() {
+                    const canvas = this.$refs.voiceCanvas;
+                    const analyser = this.voiceAnalyser;
+                    if (!canvas || !analyser) return;
+                    const ctx = canvas.getContext('2d');
+                    const W = canvas.width, H = canvas.height;
+                    const bins = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(bins);
+                    const bars = this.meterBars;
+                    // 语音主要能量在前 2/3 频段，后面的高频几乎全是噪声
+                    const usable = Math.max(bars, Math.floor(bins.length * 0.66));
+                    const step = Math.max(1, Math.floor(usable / bars));
+                    ctx.clearRect(0, 0, W, H);
+                    const barW = W / bars;
+                    let total = 0;
+                    for (let i = 0; i < bars; i++) {
+                        let sum = 0;
+                        for (let j = 0; j < step; j++) sum += bins[i * step + j] || 0;
+                        const raw = Math.min(1, (sum / step) / 180);   // 归一化 + 压底噪
+                        const prev = this.voiceLevels[i] || 0;
+                        // 上升快、回落慢 → 视觉上像"弹一下再收回"
+                        const smooth = raw > prev ? prev + (raw - prev) * 0.65 : prev * 0.82;
+                        this.voiceLevels[i] = smooth;
+                        total += smooth;
+                        // 居中对称：柱子从中间向上下生长
+                        const h = Math.max(3, smooth * H * 0.9);
+                        const x = i * barW + barW * 0.22;
+                        const w = Math.max(2, barW * 0.56);
+                        const g = ctx.createLinearGradient(0, (H - h) / 2, 0, (H + h) / 2);
+                        g.addColorStop(0, '#22d3ee');
+                        g.addColorStop(0.5, '#2563eb');
+                        g.addColorStop(1, '#22d3ee');
+                        ctx.fillStyle = g;
+                        this.roundBar(ctx, x, (H - h) / 2, w, h, Math.min(w / 2, 4));
+                    }
+                    const level = total / bars;
+                    if (level > 0.06) this.voiceLastSound = Date.now();
+                    // 3 秒没有任何声音 → 明确提示（这正是"语音到底传进去没有"最需要的反馈）
+                    if (Date.now() - this.voiceLastSound > 3000) {
+                        this.voiceStatus = '没有检测到声音：请靠近麦克风，或检查系统麦克风权限';
+                    } else if (String(this.voiceStatus).indexOf('没有检测到声音') === 0) {
+                        this.voiceStatus = this.voiceText ? '正在识别…' : '麦克风已就绪，请开始说话';
+                    }
+                },
+
+                /** 圆角矩形（老浏览器没有 roundRect 时退回直角矩形） */
+                roundBar(ctx, x, y, w, h, r) {
+                    try {
+                        ctx.beginPath();
+                        if (ctx.roundRect) {
+                            ctx.roundRect(x, y, w, h, r);
+                        } else {
+                            ctx.rect(x, y, w, h);
+                        }
+                        ctx.fill();
+                    } catch (e) {
+                        ctx.fillRect(x, y, w, h);
+                    }
+                },
+
+                /** 复位语音状态并释放连接（识别结束 / 出错 / 停止都走这里） */
+                resetVoice() {
+                    this.voiceOn = false;
+                    this.voiceBusy = false;
+                    this.voiceText = '';
+                    this.voiceStatus = '';
+                    this.stopMicMeter();      // 释放浏览器侧麦克风，别让浏览器一直显示"正在使用麦克风"
+                    if (this.voiceTimer) {
+                        clearTimeout(this.voiceTimer);
+                        this.voiceTimer = null;
+                    }
+                    if (this.voiceWs) {
+                        try { this.voiceWs.close(); } catch (e) {}
+                        this.voiceWs = null;
+                    }
+                },
+
+                // ================= 语音播报（TTS） =================
+                /** POST /voice/tts {text} → {audio:"/static/tts/xxx.mp3"} */
+                speak(text) {
+                    // 只播报前 180 字，长报告读起来太累
+                    const short = String(text).replace(/[#*`>\-]/g, '').trim().slice(0, 180);
+                    if (!short) return;
+                    fetch('/voice/tts', {
+                        method: 'POST',
+                        headers: this.authHeaders({ 'Content-Type': 'application/json' }),
+                        body: JSON.stringify({ text: short })
+                    })
+                        .then(res => res.json())
+                        .then(res => {
+                            const url = (res && (res.audio || res.data || res.url)) || '';
+                            if (!url) return;
+                            this.playAudio(url);
+                        })
+                        .catch(() => { /* 播报失败不影响文字回复 */ });
+                },
+
+                playAudio(url) {
+                    try {
+                        if (this.currentAudio) { this.currentAudio.pause(); this.currentAudio = null; }
+                        const audio = new Audio(url);
+                        this.currentAudio = audio;
+                        audio.play().catch(() => { /* 浏览器自动播放策略拦截，忽略 */ });
+                    } catch (e) { /* 忽略 */ }
+                },
+
+                // ================= 实时告警（WebSocket 推送） =================
+                /** ws://host/ws/notify?user_id=：收到 health_alert 弹窗 + 播报 + 回执 */
+                connectNotify() {
+                    if (this.notifyWs) { try { this.notifyWs.close(); } catch (e) {} }
+                    let url = 'ws://' + location.host + '/ws/notify?user_id=' + encodeURIComponent(this.userId);
+                    if (this.token) url += '&token=' + encodeURIComponent(this.token);
+                    let ws;
+                    try {
+                        ws = new WebSocket(url);
+                    } catch (e) { return; }
+                    this.notifyWs = ws;
+                    const self = this;
+
+                    ws.onmessage = function (e) {
+                        let data;
+                        try { data = JSON.parse(e.data); } catch (err) { return; }
+                        if (data && data.type === 'health_alert') {
+                            self.handleAlert(data);
+                        }
+                    };
+
+                    ws.onclose = function () {
+                        // 断线 5 秒后自动重连（保证"通知不到"这类风险不发生）
+                        if (self.notifyTimer) return;
+                        self.notifyTimer = setTimeout(function () {
+                            self.notifyTimer = null;
+                            self.connectNotify();
+                        }, 5000);
+                    };
+                },
+
+                handleAlert(data) {
+                    const level = data.level || '中危';
+                    const cls = level === '高危' ? 'high' : (level === '低危' ? 'low' : 'mid');
+                    const msg = data.message || data.description || '检测到健康指标异常，请留意身体状况。';
+                    this.alertPopup = {
+                        alertId: data.alert_id !== undefined ? data.alert_id : (data.id || null),
+                        level: level,
+                        cls: cls,
+                        message: msg
+                    };
+                    // 自动语音播报
+                    if (this.ttsEnabled) {
+                        this.speak('健康提醒：' + level + '。' + msg + ' 如果感觉不舒服，请立刻联系家里人，紧急情况拨打 120。');
+                    }
+                },
+
+                /** POST /alert/{alert_id}/confirm：告警闭环回执 */
+                confirmAlert() {
+                    const id = this.alertPopup ? this.alertPopup.alertId : null;
+                    this.alertPopup = null;
+                    if (id === null || id === undefined) {
+                        this.tip('已记录，请注意身体');
+                        return;
+                    }
+                    this.authFetch('/alert/' + encodeURIComponent(id) + '/confirm', { method: 'POST' })
+                        .then(res => res.json().catch(() => ({})))
+                        .then(res => this.tip(res && res.detail ? this.pickDetail(res) : '已确认，家属那边也会看到'))
+                        .catch(err => this.tip('确认失败：' + err));
+                },
+
+                // ================= 服务健康状态（降级感知） =================
+                checkHealth() {
+                    fetch('/health')
+                        .then(res => res.json())
+                        .then(res => {
+                            const payload = (res && res.data) ? res.data : res;
+                            if (payload && payload.mode) this.mode = payload.mode;
+                        })
+                        .catch(() => { this.mode = 'partial'; });
+                }
+            }
+        });
+    </script>
+</body>
+</html>
